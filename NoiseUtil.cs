@@ -21,7 +21,7 @@ public static class NoiseUtil {
       colors[i] = new Color(sample, sample, sample);
     }
     
-    Texture2D perlinTexture2D = new Texture2D(width,height,TextureFormat.ARGB4444, false);
+    Texture2D perlinTexture2D = new Texture2D(width,height,TextureFormat.RGB24, false);
     perlinTexture2D.SetPixels(colors);
     perlinTexture2D.Apply(false, false);
     return perlinTexture2D;
@@ -44,7 +44,7 @@ public static class NoiseUtil {
       colors[i] = new Color(sample, sample, sample);
     }
     
-    Texture2D fbmTexture2D = new Texture2D(width,height,TextureFormat.ARGB4444, false);
+    Texture2D fbmTexture2D = new Texture2D(width,height,TextureFormat.RGB24, false);
     fbmTexture2D.SetPixels(colors);
     fbmTexture2D.Apply(false, false);
     return fbmTexture2D;
@@ -137,7 +137,7 @@ public static class NoiseUtil {
 
     }
 
-    Texture2D distortedTexture2D = new Texture2D(width,height,TextureFormat.ARGB4444, false);
+    Texture2D distortedTexture2D = new Texture2D(width,height,TextureFormat.RGB24, false);
     distortedTexture2D.SetPixels(distorted);
     distortedTexture2D.Apply();
     return distortedTexture2D;
