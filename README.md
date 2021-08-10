@@ -1,5 +1,5 @@
 # NoiseUtil
- Simple helper for creating:
+ Simple C# helper for creating:
 
 - [Perlin Noise](https://en.wikipedia.org/wiki/Perlin_noise)
 - [Fractal Brownian Motion](https://thebookofshaders.com/13/)
