@@ -23,7 +23,7 @@ Usage (burst):
 
 ```c#
 using (var fbm = NoiseUtil.GenerateFbmValuesBurst(512, 512, fbmScale)) {
-        var distortedTexture = NoiseUtil.DistortImageBurst(512, 512, fbm, sourceImageArray, distortAmount);
+        distortedTexture = NoiseUtil.DistortImageBurst(512, 512, fbm, sourceImageArray, distortAmount);
 }
 ```
 
