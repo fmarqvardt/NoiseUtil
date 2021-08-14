@@ -1,5 +1,15 @@
 ﻿using System;
+using System.Diagnostics;
+using Unity.Burst;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.SocialPlatforms;
+using Debug = UnityEngine.Debug;
+using Random = UnityEngine.Random;
+using math = Unity.Mathematics.math;
 
 public static class NoiseUtil {
   // Written by Fredric Marqvardt
@@ -121,14 +131,13 @@ public static class NoiseUtil {
       Debug.LogWarning("Distort Image Failed: noiseValues and sourceImage length must match.");
       return null;
     }
-    Array.Reverse(sourceImage);
     var distorted = new Color[width * height];
-    
+    float noiseVal;
     //Apply distortion
     int x = 0, y = 0;
     for (int i = 0; i < height*width; i++) {
       NoiseUtil.IndexToCoordinates(out x, out y, i, width);
-      float noiseVal = noiseValues[i];
+      noiseVal = noiseValues[i];
       int shift = Mathf.RoundToInt(noiseVal * distortAmount);
       distorted[i] =
         sourceImage[
@@ -142,6 +151,64 @@ public static class NoiseUtil {
     distortedTexture2D.Apply();
     return distortedTexture2D;
   }
+  
+  public static Texture2D DistortImageBurst(int width, int height, NativeArray<float> noiseValues, Color[] sourceImage, float distortAmount = 50f) {
+    if (noiseValues.Length != sourceImage.Length) {
+      Debug.LogWarning("Distort Image Burst Failed: noiseValues and sourceImage length must match.");
+      return null;
+    }
+    var souceNativeArray = GetNativeArrayColor(sourceImage);
+    var distorted = new NativeArray<Color>(width * height, Allocator.TempJob);
+    var job = new DistortJob() {samples = noiseValues, height = height, width = width, destination = distorted, source = souceNativeArray, distortAmount = distortAmount}
+      .Schedule(distorted.Length, 64);
+    job.Complete();
+
+    Texture2D distortedTexture2D = new Texture2D(width,height,TextureFormat.RGB24, false);
+    distortedTexture2D.SetPixels(distorted.ToArray());
+    distortedTexture2D.Apply();
+    
+    distorted.Dispose();
+    souceNativeArray.Dispose();
+    
+    return distortedTexture2D;
+  }
+
+  public static NativeArray<float> GeneratePerlinValuesBurst(int width, int height, float scale = 6.5f) {
+    NativeArray<float> samples = new NativeArray<float>(width * height, Allocator.TempJob);
+      var job = new PerlinJob() {samples = samples, height = height, width = width, scale = scale, origin = 500f}
+        .Schedule(samples.Length, 64);
+      job.Complete();
+      return samples;
+    }
+  
+  public static NativeArray<float> GenerateFbmValuesBurst(int width, int height, float scale = 6.5f, int octaves = 3, float lacunarity = 2.4f, float persistance = 0.3f) {
+    
+    NativeArray<float> samples = new NativeArray<float>(width * height, Allocator.TempJob);
+    var job = new FbmJob(){samples = samples, height = height, width = width, scale = scale, 
+        origin = 500f, octaves = octaves, lacunarity = lacunarity, persistance = persistance}
+      .Schedule(samples.Length, 64);
+    job.Complete();
+    return samples;
+  }
+  
+  public static Texture2D GenerateFbmTexture2DBurst(int width, int height, float scale = 6.5f, int octaves = 3, float lacunarity = 2.4f, float persistance = 0.3f, bool removeBias = true) {
+    var samples = GenerateFbmValuesBurst(width, height, scale, octaves, lacunarity, persistance);
+    NativeArray<Color> colors = new NativeArray<Color>(samples.Length, Allocator.TempJob);
+    Texture2D fbmTexture2D = new Texture2D(width,height,TextureFormat.RGB24, false);
+      
+    var job = new SetColorsJob(){samples = samples, colors = colors}
+      .Schedule(samples.Length, 64);
+    job.Complete();
+    
+    
+    fbmTexture2D.SetPixels(colors.ToArray());
+    fbmTexture2D.Apply(false, false);
+
+    samples.Dispose();
+    colors.Dispose();
+    
+    return fbmTexture2D;
+  }
 
   static int CoordinatesToIndex(int x, int y, int width) {
     return width * y + x;
@@ -151,9 +218,87 @@ public static class NoiseUtil {
     x = index % width;
     y = index / width;
   }
+  
+  static unsafe NativeArray<Color> GetNativeArrayColor(Color[] colorArray)
+  {
+    NativeArray<Color> colors = new NativeArray<Color>(colorArray.Length, Allocator.TempJob,
+      NativeArrayOptions.UninitializedMemory);
 
+    fixed (void* vertexBufferPointer = colorArray)
+    {
+      UnsafeUtility.MemCpy(NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(colors),
+        vertexBufferPointer, colorArray.Length * (long) UnsafeUtility.SizeOf<Color>());
+    }
+    return colors;
+  }
+}
+
+[BurstCompile(CompileSynchronously = true)]
+internal struct DistortJob : IJobParallelFor {
+  [ReadOnly] public NativeArray<float> samples;
+  [ReadOnly] public NativeArray<Color> source;
+  public NativeArray<Color> destination;
+  public int width, height;
+  public float distortAmount;
+  public void Execute(int i) {
+    float2 coords = new float2();
+    int x = i % width;
+    int y = i / width;
+    float noiseVal = samples[i];
+    int shift = (int)math.round(noiseVal * distortAmount);
+    destination[i] = source[width * math.clamp((y + shift), 0, height - 1)
+                            + math.clamp((x + shift), 0, width - 1)];
+  }
 }
 
 
 
+[BurstCompile(CompileSynchronously = true)]
+internal struct SetColorsJob : IJobParallelFor {
+  [ReadOnly]public NativeArray<float> samples;
+  [WriteOnly]public NativeArray<Color> colors;
+  public void Execute(int i) {
+    float sample = samples[i];
+    colors[i] = new Color(sample,sample,sample);
+  }
+}
 
+[BurstCompile(CompileSynchronously = true)]
+internal struct PerlinJob : IJobParallelFor {
+  [WriteOnly] public NativeArray<float> samples;
+  public int width, height;
+  public float scale, origin;
+  public void Execute(int i) {
+    float2 coords = new float2();
+    int x = i % width;
+    int y = i / width;
+    coords.x = origin + (float)x / (float)width * scale;
+    coords.y = origin + (float)y / (float)height * scale;
+    
+    samples[i] = Unity.Mathematics.noise.cnoise(coords);
+  }
+}
+
+[BurstCompile(CompileSynchronously = true)]
+internal struct FbmJob : IJobParallelFor {
+  public NativeArray<float> samples;
+  public int width, height, octaves;
+  public float scale, origin, persistance, lacunarity;
+  public void Execute(int i) {
+    int x = i % width;
+    int y = i / width;
+    
+    float frequency = 1;
+    float amplitude = 1;
+    float2 coords = new float2();
+    for (int j = 0; j < octaves; j++) {
+      
+      coords.x = origin + (float)x / (float)width * scale * frequency;
+      coords.y = origin + (float)y / (float)height * scale * frequency;
+      samples[i] += Unity.Mathematics.noise.cnoise(coords)*amplitude;
+
+      amplitude *= persistance;
+      frequency *= lacunarity;
+    }
+  }
+}
