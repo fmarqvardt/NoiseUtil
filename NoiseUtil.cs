@@ -1,12 +1,10 @@
 ﻿using System;
-using System.Diagnostics;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.SocialPlatforms;
 using Debug = UnityEngine.Debug;
 using Random = UnityEngine.Random;
 using math = Unity.Mathematics.math;
