@@ -34,3 +34,5 @@ Some rudimentary performance measurements of generating a 512x512 Fbm with 3 oct
 | ~49.5ms           | ~7.2ms                  |
 
 Lots of speedups can make made, especially on the burst side using [Texture2D](https://docs.unity3d.com/ScriptReference/Texture2D.html).GetRawTextureData, but I opted out of it for now, in the interest of time. Summaries for the bursted methods and helper methods are also on the TODO-list.
+
+Ideally you would do this on the GPU and then Blit the results to a texture, but if speed isn't a concern then this is an option.
